@@ -33,7 +33,7 @@ echo ""
 echo -e "${YELLOW}Installing dependencies...${NC}"
 
 sudo apt update -qq
-sudo apt install -y mumble-server sqlite3 nodejs npm
+sudo apt install -y mumble-server sqlite3
 sudo systemctl enable mumble-server
 
 pip install websockify --break-system-packages -q 2>/dev/null || true
