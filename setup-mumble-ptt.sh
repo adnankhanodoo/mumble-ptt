@@ -137,3 +137,35 @@ echo -e "  Add: https://$ACCESS_IP:$WS_PORT"
 echo ""
 echo -e "  ${YELLOW}PTT Key:${NC} Space bar (hold to talk)"
 echo ""
+
+# ── Desktop Mumble Client Setup ──────────────────────────────
+echo ""
+echo -e "${YELLOW}Setting up Mumble desktop client (always-on mode)...${NC}"
+
+sudo apt install -y mumble
+
+# Create Mumble config directory
+mkdir -p "$HOME/.config/Mumble"
+
+# Write Mumble config with auto-connect and continuous mode
+cat > "$HOME/.config/Mumble/Mumble.conf" << EOF
+[net]
+address=$ACCESS_IP
+port=64738
+username=$USER
+password=
+
+[audio]
+transmit=0
+vadmax=0.8
+vadmin=0.3
+
+[ui]
+showContextMenuInMenuBar=false
+EOF
+
+echo -e "${GREEN}✓ Mumble desktop client configured${NC}"
+echo ""
+echo -e "  ${YELLOW}Start desktop client:${NC} mumble"
+echo -e "  ${YELLOW}Auto-connect to:${NC} $ACCESS_IP:64738"
+echo -e "  ${YELLOW}Mode:${NC} Continuous (always transmitting)"
