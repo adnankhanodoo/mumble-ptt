@@ -24,7 +24,6 @@ else
     echo -e "${YELLOW}⚠ NetBird not detected${NC}"
     read -p "Enter NetBird IP (or press Enter to use local IP $LOCAL_IP): " NB_MANUAL
     ACCESS_IP="${NB_MANUAL:-$LOCAL_IP}"
-    ACCESS_IP="$LOCAL_IP"
 fi
 
 WS_PORT=8080
@@ -35,7 +34,7 @@ echo ""
 echo -e "${YELLOW}Installing dependencies...${NC}"
 
 sudo apt update -qq
-sudo apt install -y mumble-server sqlite3
+sudo apt install -y mumble-server sqlite3 python3-pip
 sudo systemctl enable mumble-server
 
 # websockify
