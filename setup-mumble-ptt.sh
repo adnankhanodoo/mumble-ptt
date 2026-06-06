@@ -37,16 +37,31 @@ sudo apt update -qq
 sudo apt install -y mumble-server sqlite3 python3-pip
 sudo systemctl enable mumble-server
 
-# websockify
+# Install nodejs if not present
+if ! command -v npm &>/dev/null; then
+    echo "Installing nodejs..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - 2>/dev/null
+    sudo apt install -y nodejs
+fi
+
+# Install websockify
+echo "Installing websockify..."
+pip3 install websockify --break-system-packages -q 2>/dev/null || \
 pip install websockify --break-system-packages -q 2>/dev/null || true
 
-# Patch websockify for Python 3.12 SSL
-grep -q "check_hostname = False" ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || \
-sed -i 's/context = ssl.create_default_context()/context = ssl.create_default_context()\n                    context.check_hostname = False\n                    context.verify_mode = ssl.CERT_NONE/' \
-    ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || true
+# Patch websockify SSL for Python 3.12/3.14
+PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+WS_PY="$HOME/.local/lib/python${PYVER}/site-packages/websockify/websockifyserver.py"
+if [ -f "$WS_PY" ]; then
+    grep -q "check_hostname = False" "$WS_PY" 2>/dev/null || \
+    sed -i 's/context = ssl.create_default_context()/context = ssl.create_default_context()\n                    context.check_hostname = False\n                    context.verify_mode = ssl.CERT_NONE/' \
+        "$WS_PY" 2>/dev/null || true
+    echo -e "${GREEN}✓ websockify SSL patched${NC}"
+fi
 
-# mumble-web via npm (bundled with nodesource nodejs)
+# Install mumble-web
 if [ ! -d "$HOME/node_modules/mumble-web" ]; then
+    echo "Installing mumble-web..."
     npm install mumble-web --prefix "$HOME" 2>/dev/null
 else
     echo -e "${GREEN}✓ mumble-web already installed${NC}"
@@ -80,13 +95,16 @@ sleep 2
 
 echo ""
 echo -e "${YELLOW}Setting up systemd service...${NC}"
+
+WEBSOCKIFY_BIN=$(which websockify 2>/dev/null || echo "$HOME/.local/bin/websockify")
+
 sudo tee /etc/systemd/system/mumble-ptt-web.service > /dev/null << EOF
 [Unit]
 Description=Mumble PTT WebSocket Proxy
 After=mumble-server.service
 
 [Service]
-ExecStart=$HOME/.local/bin/websockify --web $HOME/node_modules/mumble-web/dist --cert=$CERT_DIR/server.crt --key=$CERT_DIR/server.key --ssl-target $WS_PORT 127.0.0.1:$MUMBLE_PORT
+ExecStart=$WEBSOCKIFY_BIN --web $HOME/node_modules/mumble-web/dist --cert=$CERT_DIR/server.crt --key=$CERT_DIR/server.key --ssl-target $WS_PORT 127.0.0.1:$MUMBLE_PORT
 Restart=always
 RestartSec=5
 User=$USER
@@ -99,6 +117,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable mumble-ptt-web
 sudo systemctl restart mumble-ptt-web
 sleep 2
+
+if sudo systemctl is-active --quiet mumble-ptt-web; then
+    echo -e "${GREEN}✓ PTT service running${NC}"
+else
+    echo -e "${RED}✗ PTT service failed — check: sudo journalctl -u mumble-ptt-web -n 20${NC}"
+fi
 
 echo ""
 echo -e "${BLUE}============================================${NC}"
