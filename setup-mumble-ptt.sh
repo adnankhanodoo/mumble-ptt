@@ -21,7 +21,9 @@ if [ -n "$NETBIRD_IP" ]; then
     echo -e "${GREEN}✓ NetBird detected: $NETBIRD_IP${NC}"
     ACCESS_IP="$NETBIRD_IP"
 else
-    echo -e "${YELLOW}⚠ NetBird not detected, using local IP: $LOCAL_IP${NC}"
+    echo -e "${YELLOW}⚠ NetBird not detected${NC}"
+    read -p "Enter NetBird IP (or press Enter to use local IP $LOCAL_IP): " NB_MANUAL
+    ACCESS_IP="${NB_MANUAL:-$LOCAL_IP}"
     ACCESS_IP="$LOCAL_IP"
 fi
 
