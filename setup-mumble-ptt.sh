@@ -1,0 +1,107 @@
+#!/bin/bash
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo ""
+echo -e "${BLUE}============================================${NC}"
+echo -e "${BLUE}   SMS IoT — Mumble PTT Setup${NC}"
+echo -e "${BLUE}============================================${NC}"
+echo ""
+
+# Detect NetBird IP
+NETBIRD_IP=$(ip addr show wt0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+
+if [ -n "$NETBIRD_IP" ]; then
+    echo -e "${GREEN}✓ NetBird detected: $NETBIRD_IP${NC}"
+    ACCESS_IP="$NETBIRD_IP"
+else
+    echo -e "${YELLOW}⚠ NetBird not detected, using local IP: $LOCAL_IP${NC}"
+    ACCESS_IP="$LOCAL_IP"
+fi
+
+WS_PORT=8080
+MUMBLE_PORT=64738
+CERT_DIR="$HOME/.mumble-ptt-certs"
+
+echo ""
+echo -e "${YELLOW}Installing dependencies...${NC}"
+
+sudo apt update -qq
+sudo apt install -y mumble-server sqlite3 nodejs npm
+sudo systemctl enable mumble-server
+
+pip install websockify --break-system-packages -q 2>/dev/null || true
+
+# Patch websockify for Python 3.12
+grep -q "check_hostname = False" ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || \
+sed -i 's/context = ssl.create_default_context()/context = ssl.create_default_context()\n                    context.check_hostname = False\n                    context.verify_mode = ssl.CERT_NONE/' \
+    ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || true
+
+npm install mumble-web --prefix "$HOME" 2>/dev/null
+
+echo ""
+echo -e "${YELLOW}Generating SSL certificates...${NC}"
+mkdir -p "$CERT_DIR"
+[ ! -f "$CERT_DIR/server.crt" ] && \
+openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+    -keyout "$CERT_DIR/server.key" \
+    -out "$CERT_DIR/server.crt" \
+    -subj "/CN=$ACCESS_IP" -quiet
+echo -e "${GREEN}✓ Certificates ready${NC}"
+
+echo ""
+echo -e "${YELLOW}Configuring mumble-web...${NC}"
+cat > "$HOME/node_modules/mumble-web/dist/config.local.js" << EOF
+window.mumbleWebConfig.defaults['port'] = '$WS_PORT';
+window.mumbleWebConfig.defaults['address'] = '$ACCESS_IP';
+window.mumbleWebConfig.settings['voiceMode'] = 'ptt';
+window.mumbleWebConfig.settings['pttKey'] = 'space';
+EOF
+
+echo ""
+echo -e "${YELLOW}Clearing bans and starting mumble-server...${NC}"
+sudo sqlite3 /var/lib/mumble-server/mumble-server.sqlite "DELETE FROM bans;" 2>/dev/null || true
+sudo systemctl restart mumble-server
+sleep 2
+
+echo ""
+echo -e "${YELLOW}Setting up systemd service...${NC}"
+sudo tee /etc/systemd/system/mumble-ptt-web.service > /dev/null << EOF
+[Unit]
+Description=Mumble PTT WebSocket Proxy
+After=mumble-server.service
+
+[Service]
+ExecStart=$HOME/.local/bin/websockify --web $HOME/node_modules/mumble-web/dist --cert=$CERT_DIR/server.crt --key=$CERT_DIR/server.key --ssl-target $WS_PORT 127.0.0.1:$MUMBLE_PORT
+Restart=always
+RestartSec=5
+User=$USER
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable mumble-ptt-web
+sudo systemctl restart mumble-ptt-web
+sleep 2
+
+echo ""
+echo -e "${BLUE}============================================${NC}"
+echo -e "${GREEN}  ✓ Setup Complete!${NC}"
+echo -e "${BLUE}============================================${NC}"
+echo ""
+echo -e "  ${GREEN}Access URL:${NC} https://$ACCESS_IP:$WS_PORT"
+echo ""
+echo -e "  ${YELLOW}Chrome mic fix (once per client):${NC}"
+echo -e "  chrome://flags/#unsafely-treat-insecure-origin-as-secure"
+echo -e "  Add: https://$ACCESS_IP:$WS_PORT"
+echo ""
+echo -e "  ${YELLOW}PTT Key:${NC} Space bar (hold to talk)"
+echo ""
