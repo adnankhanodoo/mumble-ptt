@@ -82,7 +82,7 @@ echo ""
 echo -e "${YELLOW}Configuring mumble-web...${NC}"
 cat > "$HOME/node_modules/mumble-web/dist/config.local.js" << EOF
 window.mumbleWebConfig.defaults['port'] = '$WS_PORT';
-window.mumbleWebConfig.defaults['address'] = '$ACCESS_IP';
+window.mumbleWebConfig.defaults['address'] = '127.0.0.1';
 window.mumbleWebConfig.settings['voiceMode'] = 'ptt';
 window.mumbleWebConfig.settings['pttKey'] = 'space';
 EOF
