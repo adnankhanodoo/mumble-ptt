@@ -36,23 +36,30 @@ sudo apt update -qq
 sudo apt install -y mumble-server sqlite3
 sudo systemctl enable mumble-server
 
+# websockify
 pip install websockify --break-system-packages -q 2>/dev/null || true
 
-# Patch websockify for Python 3.12
+# Patch websockify for Python 3.12 SSL
 grep -q "check_hostname = False" ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || \
 sed -i 's/context = ssl.create_default_context()/context = ssl.create_default_context()\n                    context.check_hostname = False\n                    context.verify_mode = ssl.CERT_NONE/' \
     ~/.local/lib/python3.12/site-packages/websockify/websockifyserver.py 2>/dev/null || true
 
-npm install mumble-web --prefix "$HOME" 2>/dev/null
+# mumble-web via npm (bundled with nodesource nodejs)
+if [ ! -d "$HOME/node_modules/mumble-web" ]; then
+    npm install mumble-web --prefix "$HOME" 2>/dev/null
+else
+    echo -e "${GREEN}✓ mumble-web already installed${NC}"
+fi
 
 echo ""
 echo -e "${YELLOW}Generating SSL certificates...${NC}"
 mkdir -p "$CERT_DIR"
-[ ! -f "$CERT_DIR/server.crt" ] && \
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-    -keyout "$CERT_DIR/server.key" \
-    -out "$CERT_DIR/server.crt" \
-    -subj "/CN=$ACCESS_IP" -quiet
+if [ ! -f "$CERT_DIR/server.crt" ]; then
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -keyout "$CERT_DIR/server.key" \
+        -out "$CERT_DIR/server.crt" \
+        -subj "/CN=$ACCESS_IP" -quiet
+fi
 echo -e "${GREEN}✓ Certificates ready${NC}"
 
 echo ""
